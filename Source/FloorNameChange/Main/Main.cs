@@ -17,20 +17,28 @@ namespace FloorNameChanger
         {
             private static Dictionary<string, (string replacement, List<ThingDef> defs)> GetReplacementMap()
             {
+                var defs = new List<ThingDef>();
+                var mahoganyWood = DefDatabase<ThingDef>.GetNamed("VV_MahoganyWood");
+                if (mahoganyWood != null) defs.Add(mahoganyWood);
+                var mahoganyLumber = DefDatabase<ThingDef>.GetNamedSilentFail("VV_MahoganyLumber");
+                if (mahoganyLumber != null) defs.Add(mahoganyLumber);
+
+                if (defs.Count == 0)
+                {
+                    Log.Error("[New Harvest] No wood defs to rename.");
+                    return null;
+                }
+
                 return new Dictionary<string, (string replacement, List<ThingDef> defs)>
                 {
                     {
                         "mahogany",
                         (
                             "VV_MahoganyTranslation".Translate(),
-                            new List<ThingDef>
-                            {
-                                DefDatabase<ThingDef>.GetNamedSilentFail("VV_MahoganyWood"),
-                                DefDatabase<ThingDef>.GetNamedSilentFail("VV_MahoganyLumber"),
-                            }.Where(def => def != null).ToList()
+                            defs
                         )
                     }
-                    // Add more replacements as needed.
+                    // More replacements if needed.
                 };
             }
 
@@ -38,29 +46,33 @@ namespace FloorNameChanger
             private static Dictionary<string, (string replacement, List<TerrainDef> terrainList)> GetNewHarvestFloorsMap()
             {
 
-                var dict = GetReplacementMap();
+                var map = GetReplacementMap();
+
+                if (map.NullOrEmpty())
+                    return null;
 
                 var allDefs = new HashSet<ThingDef>(
-                    dict.Values.SelectMany(tuple => tuple.defs)
+                    map.Values.SelectMany(tuple => tuple.defs)
                 );
 
                 var terrainDefs = DefDatabase<TerrainDef>.AllDefsListForReading
-                    .Where(def => def.costList != null &&
+                    .Where(def => !def.costList.NullOrEmpty() &&
                                   !string.IsNullOrWhiteSpace(def.label) &&
                                   def.costList.Any(cost => allDefs.Contains(cost.thingDef))
-                    )
-                    .ToList();
+                    );
 
                 var result = new Dictionary<string, (string replacement, List<TerrainDef> defs)>();
 
-                foreach (var kvp in dict)
+                foreach (var kvp in map)
                 {
-                    var matchingTerrains = terrainDefs
-                        .Where(def => def.label.IndexOf(kvp.Key, System.StringComparison.OrdinalIgnoreCase) >= 0
-                        )
-                        .ToList();
+                    var matchingTerrains = new List<TerrainDef>();
+                    foreach (var def in terrainDefs)
+                    {
+                        if (def.label.IndexOf(kvp.Key, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                            matchingTerrains.Add(def);
+                    }
 
-                    if (matchingTerrains.Any())
+                    if (matchingTerrains.Count > 0)
                     {
                         result[kvp.Key] = (kvp.Value.replacement, matchingTerrains);
                     }
@@ -69,6 +81,7 @@ namespace FloorNameChanger
                 return result;
             }
 
+            // Case-insensitive string replacement using Regex
             private static string ReplaceIgnoreCase(string input, string target, string replacement)
             {
                 return Regex.Replace(input, Regex.Escape(target), replacement, RegexOptions.IgnoreCase);
@@ -89,8 +102,6 @@ namespace FloorNameChanger
 
                     if (string.IsNullOrWhiteSpace(strToReplace) || string.IsNullOrWhiteSpace(replacementStr))
                         continue;
-
-                    var regex = new Regex(Regex.Escape(strToReplace), RegexOptions.IgnoreCase);
 
                     foreach (var def in floorDefs)
                     {
