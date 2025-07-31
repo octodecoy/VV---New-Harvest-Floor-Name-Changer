@@ -15,43 +15,54 @@ namespace FloorNameChanger
 
         public class FloorReLabeler
         {
-            private static Dictionary<string, string> GetReplacementMap()
+            private static Dictionary<string, (string replacement, List<ThingDef> defs)> GetReplacementMap()
             {
-                return new Dictionary<string, string>
+                return new Dictionary<string, (string replacement, List<ThingDef> defs)>
                 {
-                    { "mahogany", "red mahogany" }
+                    {
+                        "mahogany",
+                        (
+                            "VV_MahoganyTranslation".Translate(),
+                            new List<ThingDef>
+                            {
+                                DefDatabase<ThingDef>.GetNamedSilentFail("VV_MahoganyWood"),
+                                DefDatabase<ThingDef>.GetNamedSilentFail("VV_MahoganyLumber"),
+                            }.Where(def => def != null).ToList()
+                        )
+                    }
                     // Add more replacements as needed.
                 };
             }
 
-            private static Dictionary<string, List<TerrainDef>> GetNewHarvestFloorsMap(IEnumerable<string> substrings)
+
+            private static Dictionary<string, (string replacement, List<TerrainDef> terrainList)> GetNewHarvestFloorsMap()
             {
-                const string newHarvestPackageId = "vvenchov.vvnewharvest";
+
+                var dict = GetReplacementMap();
+
+                var allDefs = new HashSet<ThingDef>(
+                    dict.Values.SelectMany(tuple => tuple.defs)
+                );
 
                 var terrainDefs = DefDatabase<TerrainDef>.AllDefsListForReading
-                    .Where(def =>
-                        def.modContentPack?.PackageIdPlayerFacing.Equals(newHarvestPackageId, System.StringComparison.OrdinalIgnoreCase) == true
-                        && !string.IsNullOrWhiteSpace(def.label)
-                        && def.costList != null
+                    .Where(def => def.costList != null &&
+                                  !string.IsNullOrWhiteSpace(def.label) &&
+                                  def.costList.Any(cost => allDefs.Contains(cost.thingDef))
                     )
                     .ToList();
 
-                var result = new Dictionary<string, List<TerrainDef>>();
+                var result = new Dictionary<string, (string replacement, List<TerrainDef> defs)>();
 
-                foreach (var substr in substrings)
+                foreach (var kvp in dict)
                 {
                     var matchingTerrains = terrainDefs
-                        .Where(def =>
-                            def.costList.Any(thingCount =>
-                                thingCount.thingDef.defName.IndexOf(substr, System.StringComparison.OrdinalIgnoreCase) >= 0
-                            ) &&
-                            def.label.IndexOf(substr, System.StringComparison.OrdinalIgnoreCase) >= 0
+                        .Where(def => def.label.IndexOf(kvp.Key, System.StringComparison.OrdinalIgnoreCase) >= 0
                         )
                         .ToList();
 
                     if (matchingTerrains.Any())
                     {
-                        result[substr] = matchingTerrains;
+                        result[kvp.Key] = (kvp.Value.replacement, matchingTerrains);
                     }
                 }
 
@@ -65,25 +76,18 @@ namespace FloorNameChanger
 
             public static void ReLabelFloors()
             {
-                var replacementMap = GetReplacementMap();
-
-                if (replacementMap.Count == 0)
-                    return;
-
-                var floorsMap = GetNewHarvestFloorsMap(replacementMap.Keys);
+                var floorsMap = GetNewHarvestFloorsMap();
 
                 if (floorsMap.NullOrEmpty())
                     return;
 
-                foreach (var kvp in replacementMap)
+                foreach (var kvp in floorsMap)
                 {
                     var strToReplace = kvp.Key;
-                    var replacementStr = kvp.Value;
+                    var replacementStr = kvp.Value.replacement;
+                    var floorDefs = kvp.Value.terrainList;
 
                     if (string.IsNullOrWhiteSpace(strToReplace) || string.IsNullOrWhiteSpace(replacementStr))
-                        continue;
-
-                    if (!floorsMap.TryGetValue(strToReplace, out var floorDefs) || floorDefs.NullOrEmpty())
                         continue;
 
                     var regex = new Regex(Regex.Escape(strToReplace), RegexOptions.IgnoreCase);
