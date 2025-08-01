@@ -25,7 +25,7 @@ namespace FloorNameChanger
 
                 if (defs.Count == 0)
                 {
-                    Log.Error("[New Harvest] No wood defs to rename.");
+                    Log.Error("[New Harvest] No wood defs found.");
                     return null;
                 }
 
@@ -40,6 +40,7 @@ namespace FloorNameChanger
                     }
                     // More replacements if needed.
                 };
+
             }
 
 
@@ -81,7 +82,7 @@ namespace FloorNameChanger
                 return result;
             }
 
-            // Case-insensitive string replacement using Regex
+            // Case-insensitive string replacement using Regex.
             private static string ReplaceIgnoreCase(string input, string target, string replacement)
             {
                 return Regex.Replace(input, Regex.Escape(target), replacement, RegexOptions.IgnoreCase);
@@ -90,7 +91,6 @@ namespace FloorNameChanger
             public static void ReLabelFloors()
             {
                 var floorsMap = GetNewHarvestFloorsMap();
-
                 if (floorsMap.NullOrEmpty())
                     return;
 
